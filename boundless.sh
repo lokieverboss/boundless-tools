@@ -12,37 +12,92 @@ ENV_FILE=".env.base"
 function install_environment() {
   echo "🧱 正在安装开发环境..."
 
-    echo "🔍 正在检查系统环境是否具备编译能力..."
+  echo "🔍 正在检查系统环境是否具备编译能力..."
 
-  # 检查 cc 是否存在
-  if ! command -v cc &>/dev/null; then
-    echo "⚠️ 未检测到系统编译器（cc）。将尝试自动安装..."
+  UNAME=$(uname)
 
-    UNAME=$(uname)
-    if [ "$UNAME" = "Darwin" ]; then
-      echo "🧰 检测到 macOS，运行 xcode-select 安装编译器..."
-      xcode-select --install || true
-      echo "✅ 请确保 Command Line Tools 安装完成后再继续运行脚本。"
-      exit 1
-    elif [ "$UNAME" = "Linux" ]; then
-      # 检查是 Debian 系列还是 Arch
-      if [ -f /etc/debian_version ]; then
-        echo "🧰 检测到 Debian/Ubuntu，运行 apt 安装 build-essential..."
-        sudo apt update && sudo apt install -y build-essential pkg-config libssl-dev
-      elif [ -f /etc/arch-release ]; then
-        echo "🧰 检测到 Arch Linux，运行 pacman 安装 base-devel..."
-        sudo pacman -S --noconfirm base-devel
-      else
-        echo "❌ 未知 Linux 发行版，请手动安装编译器 (gcc, make 等)"
-        exit 1
-      fi
+  # 识别平台并尝试安装依赖
+  if [ "$UNAME" = "Darwin" ]; then
+    echo "🍎 检测到 macOS，安装 Command Line Tools..."
+    xcode-select --install || true
+
+    echo "📦 安装 Homebrew OpenSSL..."
+    brew install openssl@3
+
+    export OPENSSL_DIR="$(brew --prefix openssl@3)"
+    export PKG_CONFIG_PATH="$OPENSSL_DIR/lib/pkgconfig"
+  elif [ "$UNAME" = "Linux" ]; then
+    if [ -f /etc/debian_version ]; then
+      echo "🐧 检测到 Ubuntu/Debian，安装构建依赖..."
+      sudo apt update
+      sudo apt install -y build-essential pkg-config libssl-dev curl git
+    elif [ -f /etc/arch-release ]; then
+      echo "🐧 检测到 Arch Linux，安装构建依赖..."
+      sudo pacman -Sy --noconfirm base-devel openssl pkgconf
     else
-      echo "❌ 未识别的操作系统类型：$UNAME，请手动安装 C 编译器（cc）"
+      echo "⚠️ 未知 Linux 发行版，请手动安装 gcc、make、openssl-dev、pkg-config"
       exit 1
     fi
   else
-    echo "✅ 已检测到编译器（cc）"
+    echo "❌ 不支持的操作系统：$UNAME"
+    exit 1
   fi
+
+  # 验证 OpenSSL 与 pkg-config 是否可用
+  echo "🔍 正在验证 pkg-config 和 openssl 是否可用..."
+  if ! command -v pkg-config >/dev/null || ! pkg-config --exists openssl; then
+    echo "❌ 未检测到有效的 OpenSSL 环境，pkg-config 或 openssl 配置缺失"
+    echo "请手动执行：sudo apt install -y pkg-config libssl-dev"
+    exit 1
+  else
+    echo "✅ OpenSSL 和 pkg-config 已就绪"
+  fi
+
+  echo "➡️ 安装 Rust..."
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  source "$HOME/.cargo/env"
+
+  echo "➡️ 安装 Risc0 工具链..."
+  curl -L https://risczero.com/install | bash
+
+  # 判断 shell 类型并确定配置文件
+  SHELL_NAME=$(basename "$SHELL")
+  RC_FILE=""
+  if [ "$SHELL_NAME" = "zsh" ]; then
+    RC_FILE="$HOME/.zshrc"
+  elif [ "$SHELL_NAME" = "bash" ]; then
+    RC_FILE="$HOME/.bashrc"
+  else
+    echo "⚠️ 无法识别 shell 类型，请手动配置 PATH"
+  fi
+
+  # 添加 risc0 到 PATH
+  export PATH="$HOME/.risc0/bin:$PATH"
+  if [ -n "$RC_FILE" ] && ! grep -q 'risc0/bin' "$RC_FILE"; then
+    echo 'export PATH="$HOME/.risc0/bin:$PATH"' >> "$RC_FILE"
+    source "$RC_FILE"
+  fi
+
+  echo "➡️ 安装 Risc0 Rust 支持工具链..."
+  rzup install
+  rzup install rust
+
+  echo "➡️ 安装 bento-cli..."
+  cargo install --git https://github.com/risc0/risc0 bento-client --bin bento_cli
+
+  # 添加 cargo 到 PATH
+  export PATH="$HOME/.cargo/bin:$PATH"
+  if [ -n "$RC_FILE" ] && ! grep -q 'cargo/bin' "$RC_FILE"; then
+    echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> "$RC_FILE"
+    source "$RC_FILE"
+  fi
+
+  echo "➡️ 安装 boundless-cli..."
+  cargo install --locked boundless-cli --force
+
+  echo "✅ 开发环境安装完成！你现在可以进行配置和质押操作了。"
+}
+
 
 
   echo "➡️ 安装 Rust..."
