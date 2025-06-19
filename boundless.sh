@@ -28,7 +28,7 @@ function install_environment() {
       # 检查是 Debian 系列还是 Arch
       if [ -f /etc/debian_version ]; then
         echo "🧰 检测到 Debian/Ubuntu，运行 apt 安装 build-essential..."
-        sudo apt update && sudo apt install -y build-essential
+        sudo apt update && sudo apt install -y build-essential pkg-config libssl-dev
       elif [ -f /etc/arch-release ]; then
         echo "🧰 检测到 Arch Linux，运行 pacman 安装 base-devel..."
         sudo pacman -S --noconfirm base-devel
