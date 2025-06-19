@@ -8,158 +8,70 @@ RPC_URL="$DEFAULT_RPC"
 PRIVATE_KEY=""
 ENV_FILE=".env.base"
 
-# 1️⃣ 安装环境
+# ἟1 安装环境
 function install_environment() {
   echo "🧱 正在安装开发环境..."
 
-  echo "🔍 正在检查系统环境是否具备编译能力..."
+  echo "🔍 检查系统环境..."
 
-  UNAME=$(uname)
-
-  # 识别平台并尝试安装依赖
-  if [ "$UNAME" = "Darwin" ]; then
-    echo "🍎 检测到 macOS，安装 Command Line Tools..."
-    xcode-select --install || true
-
-    echo "📦 安装 Homebrew OpenSSL..."
-    brew install openssl@3
-
-    export OPENSSL_DIR="$(brew --prefix openssl@3)"
-    export PKG_CONFIG_PATH="$OPENSSL_DIR/lib/pkgconfig"
-  elif [ "$UNAME" = "Linux" ]; then
-    if [ -f /etc/debian_version ]; then
-      echo "🐧 检测到 Ubuntu/Debian，安装构建依赖..."
-      sudo apt update
-      sudo apt install -y build-essential pkg-config libssl-dev curl git
-    elif [ -f /etc/arch-release ]; then
-      echo "🐧 检测到 Arch Linux，安装构建依赖..."
-      sudo pacman -Sy --noconfirm base-devel openssl pkgconf
+  # 检查 cc 是否存在
+  if ! command -v cc &>/dev/null; then
+    echo "⚠️ 未检测到系统编译器 (cc)"
+    UNAME=$(uname)
+    if [ "$UNAME" = "Linux" ]; then
+      if [ -f /etc/debian_version ]; then
+        echo "🛠 安装 Debian 系列依赖..."
+        sudo apt update && sudo apt install -y build-essential pkg-config libssl-dev curl git
+      elif [ -f /etc/arch-release ]; then
+        echo "🛠 安装 Arch 依赖..."
+        sudo pacman -Syu --noconfirm base-devel openssl pkgconf curl git
+      else
+        echo "❌ 未支持的 Linux 发行版，请手动安装 cc make openssl pkg-config"
+        exit 1
+      fi
     else
-      echo "⚠️ 未知 Linux 发行版，请手动安装 gcc、make、openssl-dev、pkg-config"
+      echo "❌ 未支持的操作系统：$UNAME"
       exit 1
     fi
-  else
-    echo "❌ 不支持的操作系统：$UNAME"
-    exit 1
   fi
 
-  # 验证 OpenSSL 与 pkg-config 是否可用
-  echo "🔍 正在验证 pkg-config 和 openssl 是否可用..."
-  if ! command -v pkg-config >/dev/null || ! pkg-config --exists openssl; then
-    echo "❌ 未检测到有效的 OpenSSL 环境，pkg-config 或 openssl 配置缺失"
-    echo "请手动执行：sudo apt install -y pkg-config libssl-dev"
-    exit 1
-  else
-    echo "✅ OpenSSL 和 pkg-config 已就绪"
-  fi
+  echo "✔️ 编译环境正常"
 
-  echo "➡️ 安装 Rust..."
+  echo "⬆️ 安装 Rust..."
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
   source "$HOME/.cargo/env"
 
-  echo "➡️ 安装 Risc0 工具链..."
+  echo "⬆️ 安装 Risc0..."
   curl -L https://risczero.com/install | bash
-
-  # 判断 shell 类型并确定配置文件
-  SHELL_NAME=$(basename "$SHELL")
-  RC_FILE=""
-  if [ "$SHELL_NAME" = "zsh" ]; then
-    RC_FILE="$HOME/.zshrc"
-  elif [ "$SHELL_NAME" = "bash" ]; then
-    RC_FILE="$HOME/.bashrc"
-  else
-    echo "⚠️ 无法识别 shell 类型，请手动配置 PATH"
-  fi
-
-  # 添加 risc0 到 PATH
   export PATH="$HOME/.risc0/bin:$PATH"
-  if [ -n "$RC_FILE" ] && ! grep -q 'risc0/bin' "$RC_FILE"; then
-    echo 'export PATH="$HOME/.risc0/bin:$PATH"' >> "$RC_FILE"
-    source "$RC_FILE"
-  fi
+  echo 'export PATH="$HOME/.risc0/bin:$PATH"' >> "$HOME/.bashrc"
+  source "$HOME/.bashrc"
 
-  echo "➡️ 安装 Risc0 Rust 支持工具链..."
+  echo "⬆️ 安装 Risc0 toolchain..."
   rzup install
   rzup install rust
 
-  echo "➡️ 安装 bento-cli..."
+  echo "⬆️ 安装 bento-cli..."
   cargo install --git https://github.com/risc0/risc0 bento-client --bin bento_cli
 
-  # 添加 cargo 到 PATH
-  export PATH="$HOME/.cargo/bin:$PATH"
-  if [ -n "$RC_FILE" ] && ! grep -q 'cargo/bin' "$RC_FILE"; then
-    echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> "$RC_FILE"
-    source "$RC_FILE"
-  fi
-
-  echo "➡️ 安装 boundless-cli..."
+  echo "⬆️ 安装 boundless-cli..."
   cargo install --locked boundless-cli --force
 
-  echo "✅ 开发环境安装完成！你现在可以进行配置和质押操作了。"
+  echo "✅ 安装完成!"
 }
 
-
-
-  echo "➡️ 安装 Rust..."
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-  source "$HOME/.cargo/env"
-
-  echo "➡️ 安装 Risc0..."
-  curl -L https://risczero.com/install | bash
-
-  # 判断 shell 并设置配置文件
-  SHELL_NAME=$(basename "$SHELL")
-  RC_FILE=""
-  if [ "$SHELL_NAME" = "zsh" ]; then
-    RC_FILE="$HOME/.zshrc"
-  elif [ "$SHELL_NAME" = "bash" ]; then
-    RC_FILE="$HOME/.bashrc"
-  else
-    echo "⚠️ 无法识别 shell，请手动添加 Risc0 路径到 PATH"
-  fi
-
-  # 添加 ~/.risc0/bin 到 PATH
-  export PATH="$HOME/.risc0/bin:$PATH"
-  if [ -n "$RC_FILE" ] && ! grep -q 'risc0/bin' "$RC_FILE"; then
-    echo 'export PATH="$HOME/.risc0/bin:$PATH"' >> "$RC_FILE"
-    source "$RC_FILE"
-  fi
-
-  echo "➡️ 安装 Risc0 Rust toolchain..."
-  rzup install
-  rzup install rust
-
-  echo "➡️ 安装 bento-cli..."
-  cargo install --git https://github.com/risc0/risc0 bento-client --bin bento_cli
-
-  export PATH="$HOME/.cargo/bin:$PATH"
-  if [ -n "$RC_FILE" ] && ! grep -q 'cargo/bin' "$RC_FILE"; then
-    echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> "$RC_FILE"
-    source "$RC_FILE"
-  fi
-
-  echo "➡️ 安装 boundless-cli..."
-  cargo install --locked boundless-cli --force
-
-  echo "✅ 环境安装完成！"
-}
-
-# 2️⃣ RPC 测试函数
 function test_rpc() {
-  echo "⏳ 正在测试 RPC 是否可用..."
-  RESPONSE=$(curl -s -X POST "$RPC_URL" \
-    -H "Content-Type: application/json" \
-    -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}')
+  echo "⏳ 正在测试 RPC..."
+  RESPONSE=$(curl -s -X POST "$RPC_URL" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}')
   if [[ "$RESPONSE" != *"result"* ]]; then
-    echo "❌ 无法连接到该 RPC，请检查网络或地址。"
+    echo "❌ RPC 连接失败"
     return 1
   else
-    echo "✅ RPC 测试通过，链 ID：$(echo "$RESPONSE" | grep -o '"result":"[^"]*"' | cut -d':' -f2)"
+    echo "✅ 成功，链ID：$(echo "$RESPONSE" | grep -o '"result":"[^"]*"' | cut -d':' -f2)"
     return 0
   fi
 }
 
-# 3️⃣ 写入 .env 文件
 function write_env_file() {
   cat <<EOF > "$ENV_FILE"
 ETH_RPC_URL=$RPC_URL
@@ -171,113 +83,70 @@ ORDER_STREAM_URL=https://base-mainnet.beboundless.xyz
 EOF
 }
 
-# 4️⃣ 配置菜单
 function config_menu() {
   while true; do
-    echo
-    echo "📌 当前配置："
-    echo "- RPC 地址：$RPC_URL"
-    echo "- 私钥：$( [ -z "$PRIVATE_KEY" ] && echo '未设置 ❌' || echo '已设置 ✅' )"
-
-    echo
-    echo "🛠 配置选项："
-    echo "1 - 修改 RPC"
-    echo "2 - 修改私钥"
-    echo "3 - 测试 RPC 并保存配置"
-    echo "4 - 开始质押"
-    echo "5 - 退出脚本"
-    read -p "请输入选项编号: " CONFIG_CHOICE
-
-    case "$CONFIG_CHOICE" in
-      1)
-        read -p "🔁 请输入新的 RPC 地址（当前：$RPC_URL）: " INPUT_RPC
-        [ -n "$INPUT_RPC" ] && RPC_URL="$INPUT_RPC"
-        ;;
-      2)
-        read -s -p "🔐 请输入你的私钥（不会显示）: " INPUT_KEY
-        echo
-        [ -n "$INPUT_KEY" ] && PRIVATE_KEY="$INPUT_KEY"
-        ;;
-      3)
-        if test_rpc; then
-          write_env_file
-          echo "✅ 配置已保存到 .env.base"
-        fi
-        ;;
+    echo "\n📌 当前 RPC: $RPC_URL"
+    echo "🔐 私钥: $( [ -z "$PRIVATE_KEY" ] && echo '未设置' || echo '已设置')"
+    echo "\n🛠 配置选项:"
+    echo "1 - 设置 RPC"
+    echo "2 - 设置私钥"
+    echo "3 - 测试 RPC 并保存"
+    echo "4 - 开始进行资金转入"
+    echo "5 - 退出"
+    read -p "请选择: " CHOICE
+    case "$CHOICE" in
+      1) read -p "新 RPC 地址: " INPUT; [ -n "$INPUT" ] && RPC_URL="$INPUT";;
+      2) read -s -p "输入私钥: " INPUT; echo; [ -n "$INPUT" ] && PRIVATE_KEY="$INPUT";;
+      3) test_rpc && write_env_file && echo "✅ 已保存配置";;
       4)
-        if [ -z "$PRIVATE_KEY" ]; then
-          echo "❌ 私钥未设置，请先设置私钥。"
-        elif ! test_rpc; then
-          echo "❌ RPC 不可用，请检查或更换地址。"
-        else
-          write_env_file
-          break
-        fi
-        ;;
-      5)
-        echo "👋 已退出脚本"
-        exit 0
-        ;;
-      *)
-        echo "❌ 无效输入，请重新选择。"
-        ;;
+        if [ -z "$PRIVATE_KEY" ]; then echo "❌ 私钥未设置"; continue;
+        elif ! test_rpc; then echo "❌ RPC 无效"; continue;
+        else write_env_file; break;
+        fi;;
+      5) echo "退出"; exit 0;;
+      *) echo "无效选项";;
     esac
   done
 }
 
-# 5️⃣ 质押菜单
 function staking_menu() {
   source "$ENV_FILE"
   while true; do
-    echo
-    echo "💎 请选择你要进行的操作："
-    echo "1 - 质押 USDC"
-    echo "2 - 质押 ETH"
-    echo "3 - 退出脚本"
-    read -p "请输入选项编号（1、2 或 3）: " STAKE_OPTION
-
+    echo "\n💰 选择进行操作:"
+    echo "1 - 转入 USDC (资金转入)"
+    echo "2 - 转入 ETH"
+    echo "3 - 退出"
+    read -p "选择功能: " STAKE_OPTION
     case "$STAKE_OPTION" in
       1)
-        read -p "💰 输入 USDC 质押数量（例如 0.01）: " AMOUNT
-        [ -z "$AMOUNT" ] && echo "❌ 金额不能为空。" && continue
-        echo "🚀 正在质押 USDC..."
-        boundless \
-          --rpc-url "$ETH_RPC_URL" \
+        read -p "💵 USDC 量：" AMOUNT
+        boundless --rpc-url "$ETH_RPC_URL" \
           --boundless-market-address "$BOUNDLESS_MARKET_ADDRESS" \
           --set-verifier-address "$SET_VERIFIER_ADDRESS" \
           --private-key "$PRIVATE_KEY" \
           --verifier-router-address "$VERIFIER_ADDRESS" \
           --order-stream-url "$ORDER_STREAM_URL" \
           account deposit-stake "$AMOUNT"
-        echo "✅ USDC 质押成功！"
+        echo "✅ 成功转入 USDC"
         ;;
       2)
-        read -p "💰 输入 ETH 质押数量（例如 0.00001）: " AMOUNT
-        [ -z "$AMOUNT" ] && echo "❌ 金额不能为空。" && continue
-        echo "🚀 正在质押 ETH..."
-        boundless \
-          --rpc-url "$ETH_RPC_URL" \
+        read -p "💵 ETH 量：" AMOUNT
+        boundless --rpc-url "$ETH_RPC_URL" \
           --boundless-market-address "$BOUNDLESS_MARKET_ADDRESS" \
           --set-verifier-address "$SET_VERIFIER_ADDRESS" \
           --private-key "$PRIVATE_KEY" \
           --verifier-router-address "$VERIFIER_ADDRESS" \
           --order-stream-url "$ORDER_STREAM_URL" \
           account deposit "$AMOUNT"
-        echo "✅ ETH 质押成功！"
+        echo "✅ 成功转入 ETH"
         ;;
-      3)
-        echo "👋 脚本结束，感谢使用！"
-        break
-        ;;
-      *)
-        echo "❌ 无效选项，请重新选择。"
-        ;;
+      3) break;;
+      *) echo "无效选项";;
     esac
   done
 }
 
-# 🚀 主流程
+# 主流程
 install_environment
 config_menu
 staking_menu
-
