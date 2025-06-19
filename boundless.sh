@@ -12,6 +12,39 @@ ENV_FILE=".env.base"
 function install_environment() {
   echo "🧱 正在安装开发环境..."
 
+    echo "🔍 正在检查系统环境是否具备编译能力..."
+
+  # 检查 cc 是否存在
+  if ! command -v cc &>/dev/null; then
+    echo "⚠️ 未检测到系统编译器（cc）。将尝试自动安装..."
+
+    UNAME=$(uname)
+    if [ "$UNAME" = "Darwin" ]; then
+      echo "🧰 检测到 macOS，运行 xcode-select 安装编译器..."
+      xcode-select --install || true
+      echo "✅ 请确保 Command Line Tools 安装完成后再继续运行脚本。"
+      exit 1
+    elif [ "$UNAME" = "Linux" ]; then
+      # 检查是 Debian 系列还是 Arch
+      if [ -f /etc/debian_version ]; then
+        echo "🧰 检测到 Debian/Ubuntu，运行 apt 安装 build-essential..."
+        sudo apt update && sudo apt install -y build-essential
+      elif [ -f /etc/arch-release ]; then
+        echo "🧰 检测到 Arch Linux，运行 pacman 安装 base-devel..."
+        sudo pacman -S --noconfirm base-devel
+      else
+        echo "❌ 未知 Linux 发行版，请手动安装编译器 (gcc, make 等)"
+        exit 1
+      fi
+    else
+      echo "❌ 未识别的操作系统类型：$UNAME，请手动安装 C 编译器（cc）"
+      exit 1
+    fi
+  else
+    echo "✅ 已检测到编译器（cc）"
+  fi
+
+
   echo "➡️ 安装 Rust..."
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
   source "$HOME/.cargo/env"
